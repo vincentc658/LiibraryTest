@@ -5,7 +5,7 @@ import kotlin.random.Random
 
 class CustomLibrary {
     companion object Builder {
-        private const val TAG = "LIB_EXAMPLE_ANDROID"
+        private const val TAG = "LIB_EXAMPLE_ANDROID_THIRD"
 
         fun i(message:String){
             Log.i(TAG, message)

@@ -51,14 +51,12 @@ class ViewLinkOnWebView : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 200) {
-            data?.let {
-                val dataImage = data.getStringExtra("dataImage")
-                dataImage?.let {
-                    Log.d("data masuk", CacheImage.getCacheImage(this))
-                    wvWeb.evaluateJavascript(
-                        "javascript: " +"updateFromNative(\"" + CacheImage.getCacheImage(this)+ "\")",
-                        null)
-                }
+            if (resultCode == Activity.RESULT_OK) {
+                Log.d("data masuk", CacheImage.getCacheImage(this))
+                wvWeb.evaluateJavascript(
+                    "javascript: " + "updateFromNative(\"" + CacheImage.getCacheImage(this) + "\")",
+                    null
+                )
             }
         }
     }

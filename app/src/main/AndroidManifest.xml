@@ -22,9 +22,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name="com.example.transportation.testlibrary.TestingLibraryActivity"/>
         <activity android:name="com.example.transportation.testlibrary.cameraActivity.Camera2Activity"/>
         <activity android:name="com.example.transportation.testlibrary.cameraActivity.ViewLinkOnWebView"/>
+        <activity android:name="com.example.transportation.testlibrary.cameraActivity.WebPageActivity"/>
 
     </application>
 

@@ -22,7 +22,6 @@ class ViewLinkOnWebView : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.web_view_activity)
         onInitialize()
-        onClick()
     }
 
     override fun onBackPressed() {
@@ -61,9 +60,7 @@ class ViewLinkOnWebView : AppCompatActivity() {
         }
     }
 
-    private fun onClick() {
 
-    }
 
 
     inner class WebVCamBridgeInterface {

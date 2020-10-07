@@ -5,8 +5,6 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -20,63 +18,35 @@ import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Bundle;
 import android.util.Base64;
-import android.util.Log;
 import android.util.Size;
-import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
 import com.example.transportation.testlibrary.R;
-
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
 
 public class Camera2Activity extends AppCompatActivity {
-    private File file;
     private TextureView textureView;
-
-    //Check state orientation of output image
-    private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
-
-    static {
-        ORIENTATIONS.append(Surface.ROTATION_0, 90);
-        ORIENTATIONS.append(Surface.ROTATION_90, 0);
-        ORIENTATIONS.append(Surface.ROTATION_180, 270);
-        ORIENTATIONS.append(Surface.ROTATION_270, 180);
-    }
 
     private CameraDevice cameraDevice;
     private CameraCaptureSession cameraCaptureSessions;
     private CaptureRequest.Builder captureRequestBuilder;
 
-    //Save to FILE
     private static final int REQUEST_CAMERA_PERMISSION = 200;
     private Handler mBackgroundHandler;
     private HandlerThread mBackgroundThread;
@@ -96,7 +66,6 @@ public class Camera2Activity extends AppCompatActivity {
         @Override
         public void onError(@NonNull CameraDevice cameraDevice, int i) {
             cameraDevice.close();
-            cameraDevice = null;
         }
     };
 
@@ -105,8 +74,7 @@ public class Camera2Activity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera);
-
-        textureView = (TextureView) findViewById(R.id.textureView);
+        textureView = findViewById(R.id.textureView);
         TextView tvInstruction = findViewById(R.id.tvInstruction);
         tvInstruction.setText(getIntent().getStringExtra("instruction"));
         assert textureView != null;
@@ -125,10 +93,13 @@ public class Camera2Activity extends AppCompatActivity {
             return;
         CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try {
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraDevice.getId());
-            Size[] jpegSizes = null;
-            jpegSizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-                    .getOutputSizes(ImageFormat.JPEG);
+            CameraCharacteristics characteristics = null;
+            if (manager != null) {
+                characteristics = manager.getCameraCharacteristics(cameraDevice.getId());
+            }
+            Size[] jpegSizes;
+            assert characteristics != null;
+            jpegSizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.JPEG);
 
             //Capture image with custom size
             int width = 640;
@@ -146,9 +117,7 @@ public class Camera2Activity extends AppCompatActivity {
             captureBuilder.addTarget(reader.getSurface());
             captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
 
-            //Check orientation base on device
             int cameraFacing = getIntent().getIntExtra("isFrontCamera", 0);
-            ImageView bgOverlay = findViewById(R.id.bgOverlay);
             if (cameraFacing == 1) {
                 captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, 270);
             } else {
@@ -157,8 +126,6 @@ public class Camera2Activity extends AppCompatActivity {
             ImageReader.OnImageAvailableListener readerListener = new ImageReader.OnImageAvailableListener() {
                 @Override
                 public void onImageAvailable(ImageReader imageReader) {
-//                    try {
-
                     runOnUiThread(new Runnable() {
 
                         @Override
@@ -220,7 +187,7 @@ public class Camera2Activity extends AppCompatActivity {
             Surface surface = new Surface(texture);
             captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             captureRequestBuilder.addTarget(surface);
-            cameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback() {
+            cameraDevice.createCaptureSession(Collections.singletonList(surface), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
                     if (cameraDevice == null)
@@ -261,6 +228,7 @@ public class Camera2Activity extends AppCompatActivity {
             } else {
                 bgOverlay.setBackgroundResource(R.drawable.overlay_identity_card);
             }
+            assert manager != null;
             String cameraId = manager.getCameraIdList()[cameraFacing];
             CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
             StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
@@ -272,6 +240,7 @@ public class Camera2Activity extends AppCompatActivity {
                 }, REQUEST_CAMERA_PERMISSION);
                 return;
             }
+            assert map != null;
             mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
             manager.openCamera(cameraId, stateCallback, null);
 
@@ -285,21 +254,14 @@ public class Camera2Activity extends AppCompatActivity {
         public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
             openCamera(i, i1);
         }
-
         @Override
-        public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) {
-
-        }
-
+        public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) {}
         @Override
         public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
             return false;
         }
-
         @Override
-        public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
-
-        }
+        public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {}
     };
 
     @Override
@@ -346,7 +308,7 @@ public class Camera2Activity extends AppCompatActivity {
     }
 
     private static Size chooseOptimalSize(Size[] choices, int width, int height) {
-        List<Size> bigEnough = new ArrayList<Size>();
+        List<Size> bigEnough = new ArrayList<>();
         for (Size option : choices) {
             if (option.getHeight() == option.getWidth() * height / width &&
                     option.getWidth() >= width && option.getHeight() >= height) {
@@ -361,7 +323,6 @@ public class Camera2Activity extends AppCompatActivity {
     }
 
     private static class CompareSizeByArea implements Comparator<Size> {
-
         @Override
         public int compare(Size lhs, Size rhs) {
             return Long.signum((long) (lhs.getWidth() * lhs.getHeight()) -

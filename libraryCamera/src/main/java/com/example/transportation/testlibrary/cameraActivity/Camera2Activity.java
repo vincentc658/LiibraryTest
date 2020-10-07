@@ -5,7 +5,10 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -16,13 +19,18 @@ import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.ExifInterface;
 import android.media.Image;
 import android.media.ImageReader;
+import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Bundle;
+import android.os.Looper;
 import android.util.Base64;
 import android.util.Size;
+import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
@@ -34,6 +42,12 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import com.example.transportation.testlibrary.R;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,6 +60,13 @@ public class Camera2Activity extends AppCompatActivity {
     private CameraDevice cameraDevice;
     private CameraCaptureSession cameraCaptureSessions;
     private CaptureRequest.Builder captureRequestBuilder;
+    private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
+    static{
+        ORIENTATIONS.append(Surface.ROTATION_0,90);
+        ORIENTATIONS.append(Surface.ROTATION_90,0);
+        ORIENTATIONS.append(Surface.ROTATION_180,270);
+        ORIENTATIONS.append(Surface.ROTATION_270,180);
+    }
 
     private static final int REQUEST_CAMERA_PERMISSION = 200;
     private Handler mBackgroundHandler;
@@ -108,7 +129,7 @@ public class Camera2Activity extends AppCompatActivity {
                 width = jpegSizes[0].getWidth();
                 height = jpegSizes[0].getHeight();
             }
-            final ImageReader reader = ImageReader.newInstance(width, height/2, ImageFormat.JPEG, 1);
+            final ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
             List<Surface> outputSurface = new ArrayList<>(2);
             outputSurface.add(reader.getSurface());
             outputSurface.add(new Surface(textureView.getSurfaceTexture()));
@@ -117,12 +138,11 @@ public class Camera2Activity extends AppCompatActivity {
             captureBuilder.addTarget(reader.getSurface());
             captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
 
-            int cameraFacing = getIntent().getIntExtra("isFrontCamera", 0);
-            if (cameraFacing == 1) {
-                captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, 270);
-            } else {
-                captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, 90);
-            }
+            //Check orientation base on device
+            int rotation = getWindowManager().getDefaultDisplay().getRotation();
+            captureBuilder.set(CaptureRequest.JPEG_ORIENTATION,ORIENTATIONS.get(rotation));
+
+            final int cameraFacing = getIntent().getIntExtra("isFrontCamera", 0);
             ImageReader.OnImageAvailableListener readerListener = new ImageReader.OnImageAvailableListener() {
                 @Override
                 public void onImageAvailable(ImageReader imageReader) {
@@ -134,12 +154,15 @@ public class Camera2Activity extends AppCompatActivity {
                             ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                             byte[] bytes = new byte[buffer.capacity()];
                             buffer.get(bytes);
-                            String encodedString = Base64.encodeToString(bytes, Base64.NO_WRAP);
-
-                            CacheImage.setCacheImage(Camera2Activity.this, encodedString);
-                            Intent i = new Intent();
-                            setResult(Activity.RESULT_OK, i);
-                            finish();
+                            if(cameraFacing==1){
+                                rotate(bytes);
+                            }else {
+                                String encodedString = Base64.encodeToString(bytes, Base64.NO_WRAP);
+                                CacheImage.setCacheImage(Camera2Activity.this, encodedString);
+                                Intent i = new Intent();
+                                setResult(Activity.RESULT_OK, i);
+                                finish();
+                            }
                         }
                     });
 
@@ -241,7 +264,11 @@ public class Camera2Activity extends AppCompatActivity {
                 return;
             }
             assert map != null;
-            mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
+            if(cameraFacing==1){
+                mPreviewSize = map.getOutputSizes(SurfaceTexture.class)[0];
+            }else{
+                mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), width, height);
+            }
             manager.openCamera(cameraId, stateCallback, null);
 
         } catch (CameraAccessException e) {
@@ -328,5 +355,68 @@ public class Camera2Activity extends AppCompatActivity {
             return Long.signum((long) (lhs.getWidth() * lhs.getHeight()) -
                     (long) (rhs.getWidth() * rhs.getHeight()));
         }
+    }
+    private void rotate(byte[] data) {
+
+        ExifInterface exifInterface = null;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                exifInterface = new ExifInterface(new ByteArrayInputStream(data));
+            }else{
+                String encodedString = Base64.encodeToString(data, Base64.NO_WRAP);
+
+                CacheImage.setCacheImage(Camera2Activity.this, encodedString);
+                Intent i = new Intent();
+                setResult(Activity.RESULT_OK, i);
+                finish();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        int orientation = exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION, 1);
+        int rotationDegrees = 0;
+        switch (orientation) {
+            case ExifInterface.ORIENTATION_ROTATE_90:
+                rotationDegrees = 90;
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_180:
+                rotationDegrees = 180;
+                break;
+            case ExifInterface.ORIENTATION_ROTATE_270:
+                rotationDegrees = 270;
+                break;
+        }
+
+        Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+        final Bitmap bitmapRotated = rotateImage(bitmap, rotationDegrees);
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+
+        Runnable myRunnable = new Runnable() {
+            @Override
+            public void run() {
+                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                bitmapRotated.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream);
+                byte[] byteArray = byteArrayOutputStream .toByteArray();
+                String encodedString = Base64.encodeToString(byteArray, Base64.NO_WRAP);
+
+                CacheImage.setCacheImage(Camera2Activity.this, encodedString);
+                Intent i = new Intent();
+                setResult(Activity.RESULT_OK, i);
+                finish();
+
+            }
+        };
+        mainHandler.post(myRunnable);
+
+
+    }
+
+    private static Bitmap rotateImage(Bitmap bitmap, int degree) {
+        Matrix matrix = new Matrix();
+        matrix.postScale(-1.0f, 1.0f);
+        matrix.postRotate(degree);
+        Bitmap rotatedImg = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+        bitmap.recycle();
+        return rotatedImg;
     }
 }
